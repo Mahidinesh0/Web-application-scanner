@@ -11,7 +11,7 @@ import time
 import json
 import sqlite3
 from flask import Flask, render_template, request, jsonify, send_file, Response
-
+from flask_cors import CORS
 # ── Silence Insecure Request Warnings ─────────────────────────────────────────
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)

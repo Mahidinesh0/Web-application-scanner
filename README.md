@@ -1,6 +1,6 @@
-# Mahisec — Web Application Security Scanner & WAF
+# Bensec — Web Application Security Scanner & WAF
 
-**Mahisec** is a combined offensive + defensive web security platform.
+**Bensec** is a combined offensive + defensive web security platform.
 Scan targets for XSS, SQLi, directory exposure, and missing security headers,
 while running a Flask-based WAF that blocks malicious requests in real time.
 

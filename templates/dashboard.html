@@ -3,561 +3,496 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BENSEC — Web Application Security Scanner & WAF</title>
+    <title>BENSEC // Web Application Security Scanner & WAF</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* ── Core Theme Configuration & Layout Mechanics ── */
         :root {
-            --bg-deep: #02020b;
-            --bg-card: #0b0914;
-            --bg-header: #0f0c1e;
-            --border-glow: #32254f;
-            --accent-purple: #5c2d91;
-            --text-neon: #b19ffb;
-            --accent-orange: #fca311;
-            --text-main: #f1f1f4;
-            --text-dim: #6b5c8a;
-            --accent-red: #ef4444;
+            --bg-deep: #0a0b10;
+            --bg-card: #11131c;
+            --bg-input: #161925;
+            --text-main: #f1f3f9;
+            --text-muted: #7e8494;
+            --accent-primary: #7c3aed;
+            --accent-hover: #6d28d9;
+            --status-scan: #f59e0b;
+            --severity-high: #ef4444;
+            --severity-med: #f59e0b;
+            --severity-low: #3b82f6;
+            --border-color: #1e2235;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
         body {
             background-color: var(--bg-deep);
             color: var(--text-main);
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            margin: 0;
-            padding: 24px;
+            padding: 2rem;
+            min-height: 100vh;
         }
 
         header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid var(--border-glow);
-            padding-bottom: 16px;
-            margin-bottom: 24px;
+            margin-bottom: 2.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1rem;
         }
 
-        .brand {
+        .logo-frame {
             display: flex;
             align-items: center;
-            gap: 8px;
-            font-size: 1.5rem;
-            font-weight: bold;
-            letter-spacing: 1.5px;
-            color: var(--text-main);
+            gap: 0.75rem;
         }
 
-        .brand span { color: var(--text-neon); }
-
-        .tagline {
-            color: var(--text-dim);
-            font-size: 0.85rem;
+        .logo-frame i {
+            color: var(--status-scan);
+            font-size: 1.8rem;
         }
 
-        /* ── Metrics Cards Display Configuration Grid ── */
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .card {
-            background-color: var(--bg-card);
-            border: 1px solid var(--border-glow);
-            border-radius: 8px;
-            padding: 20px;
-        }
-
-        .card-title {
-            color: var(--text-dim);
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 1.2px;
-            margin-bottom: 8px;
-            font-weight: bold;
-        }
-
-        .card-value {
-            font-size: 2rem;
-            font-weight: bold;
-        }
-
-        .severity-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            font-size: 0.85rem;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-
-        .severity-item {
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .badge-lbl {
-            padding: 1px 6px;
-            border-radius: 3px;
-            font-weight: bold;
-            font-size: 0.75rem;
-        }
-        .lbl-high { background: #ef444425; color: #ef4444; border: 1px solid #ef444450; }
-        .lbl-medium { background: #fca31125; color: #fca311; border: 1px solid #fca31150; }
-        .lbl-low { background: #3b82f625; color: #3b82f6; border: 1px solid #3b82f650; }
-
-        /* ── Target Ingestion Bar Component ── */
-        .ingestion-panel {
-            background-color: var(--bg-card);
-            border: 1px solid var(--border-glow);
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 30px;
-        }
-
-        .form-group {
-            display: flex;
-            gap: 12px;
-        }
-
-        .form-input {
-            flex: 1;
-            background-color: #05040a;
-            border: 1px solid var(--border-glow);
-            border-radius: 6px;
-            padding: 10px 14px;
-            color: var(--text-main);
-            font-family: monospace;
-        }
-
-        .form-input:focus {
-            outline: none;
-            border-color: var(--accent-purple);
-        }
-
-        .btn-add {
-            background-color: var(--accent-purple);
-            color: var(--text-main);
-            border: none;
-            padding: 10px 20px;
-            font-weight: bold;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-
-        /* ── Target Presentation Audit Data Table ── */
-        .section-title {
-            font-size: 1.1rem;
-            text-transform: uppercase;
-            letter-spacing: 1.2px;
-            color: var(--text-neon);
-            margin-bottom: 14px;
-            font-weight: bold;
-        }
-
-        .targets-table {
-            width: 100%;
-            border-collapse: collapse;
-            background-color: var(--bg-card);
-            border: 1px solid var(--border-glow);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-
-        .targets-table th, .targets-table td {
-            padding: 14px;
-            text-align: left;
-            border-bottom: 1px solid #141024;
-        }
-
-        .targets-table th {
-            background-color: var(--bg-header);
-            color: var(--text-dim);
-            font-size: 0.8rem;
-            text-transform: uppercase;
+        .logo-frame h1 {
+            font-size: 1.6rem;
+            font-weight: 800;
             letter-spacing: 1px;
         }
 
-        .status-badge {
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: bold;
+        .tagline {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        /* Metrics Deck */
+        .metrics-deck {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .metric-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+
+        .metric-card h3 {
+            color: var(--text-muted);
+            font-size: 0.8rem;
             text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.75rem;
         }
-        .status-badge.scanning { background-color: #fca31120; color: #fca311; border: 1px solid #fca31140; }
-        .status-badge.completed { background-color: #10b98120; color: #10b981; border: 1px solid #10b98140; }
-        .status-badge.error { background-color: #ef444420; color: #ef4444; border: 1px solid #ef444440; }
-        .status-badge.pending { background-color: #6b5c8a20; color: #6b5c8a; border: 1px solid #6b5c8a40; }
 
-        /* ── Action Panel Layout & Parallel Alignment Matrix ── */
-        .action-btn-container {
+        .metric-value {
+            font-size: 2.2rem;
+            font-weight: 700;
+        }
+
+        .metric-value.total-vulns { color: var(--status-scan); }
+        .metric-value.blocked-reqs { color: var(--severity-high); }
+
+        .severity-breakdown {
             display: flex;
-            align-items: center;
-            gap: 10px;
+            flex-direction: column;
+            gap: 0.4rem;
+            margin-top: 0.25rem;
         }
 
-        .btn-scan {
-            background-color: var(--accent-orange);
-            color: #02020b;
+        .sev-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+        }
+
+        .badge-high { color: var(--severity-high); font-weight: bold; }
+        .badge-med { color: var(--severity-med); font-weight: bold; }
+        .badge-low { color: var(--severity-low); font-weight: bold; }
+
+        /* Control Panel Form */
+        .control-panel {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 2rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .panel-title {
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .input-group input {
+            flex: 1;
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.75rem 1rem;
+            color: var(--text-main);
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .input-group input:focus {
+            border-color: var(--accent-primary);
+        }
+
+        .btn {
+            background-color: var(--accent-primary);
+            color: var(--text-main);
             border: none;
-            padding: 8px 16px;
-            font-weight: bold;
+            border-radius: 6px;
+            padding: 0.75rem 1.5rem;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn:hover { background-color: var(--accent-hover); }
+        .btn:disabled { background-color: var(--border-color); cursor: not-allowed; color: var(--text-muted); }
+
+        .btn-scan { background-color: #f59e0b; color: #0a0b10; }
+        .btn-scan:hover { background-color: #d97706; }
+        .btn-report { background-color: #10b981; }
+        .btn-report:hover { background-color: #059669; }
+        .btn-delete { background-color: #dc2626; }
+        .btn-delete:hover { background-color: #b91c1c; }
+
+        /* Tables Data Deck */
+        .data-deck-title {
+            font-size: 1.2rem;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: 1.2rem;
+            color: var(--text-main);
+        }
+
+        .table-container {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 2.5rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th, td {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.95rem;
+        }
+
+        th {
+            background-color: rgba(254, 254, 254, 0.02);
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            letter-spacing: 0.5px;
+        }
+
+        tr:last-child td { border-bottom: none; }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            background-color: var(--border-color);
+        }
+
+        .status-badge.scanning { background-color: rgba(245, 158, 11, 0.15); color: var(--status-scan); border: 1px solid rgba(245, 158, 11, 0.3); }
+        .status-badge.completed { background-color: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .status-badge.pending { background-color: rgba(126, 132, 148, 0.15); color: var(--text-muted); }
+        .status-badge.error { background-color: rgba(220, 38, 38, 0.15); color: #ef4444; }
+
+        .empty-row-notice {
+            padding: 3rem;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .action-flex {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .btn-ico {
+            width: 36px;
+            height: 36px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
             border-radius: 6px;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 6px;
             transition: all 0.2s;
-        }
-
-        .btn-scan:hover { background-color: #ffb733; }
-
-        .btn-download {
-            padding: 8px 14px;
-            font-weight: bold;
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            transition: all 0.2s;
-        }
-
-        .btn-download:enabled {
-            background-color: #24193d;
-            color: var(--text-neon);
-            border: 1px solid var(--accent-purple);
-            cursor: pointer;
-            opacity: 1;
-        }
-
-        .btn-download:enabled:hover {
-            background-color: #32254f;
-            border-color: #7b61ff;
-            color: #ffffff;
-        }
-
-        .btn-download:disabled {
-            background-color: #1a1528;
-            color: var(--text-dim);
-            border: 1px solid #32254f;
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
-
-        .btn-remove {
-            background-color: #220b14;
-            color: #ff6b8b;
-            border: 1px solid #5a1827;
-            padding: 8px 12px;
-            font-weight: bold;
-            border-radius: 6px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            transition: all 0.2s;
-        }
-
-        .btn-remove:hover {
-            background-color: var(--accent-red);
-            color: #02020b;
-            border-color: var(--accent-red);
+            color: var(--text-main);
         }
     </style>
 </head>
 <body>
 
     <header>
-        <div class="brand">⚡ BENSEC</div>
+        <div class="logo-frame">
+            <i class="fa-solid fa-bolt"></i>
+            <h1>BENSEC</h1>
+        </div>
         <div class="tagline">Web Application Security Scanner & WAF</div>
     </header>
 
-    <section class="metrics-grid">
-        <div class="card">
-            <div class="card-title">Total Targets</div>
-            <div class="card-value">{{ targets|length if targets else 0 }}</div>
+    <div class="metrics-deck">
+        <div class="metric-card">
+            <h3>Total Targets</h3>
+            <div class="metric-value">{{ targets|length }}</div>
         </div>
-        <div class="card">
-            <div class="card-title">WAF Blocked</div>
-            <div class="card-value" style="color: #ef4444;">
-                {% if vuln_stats is mapping %}
-                    {{ vuln_stats.get('blocked', 0) }}
-                {% else %}
-                    0
-                {% endif %}
+        <div class="metric-card">
+            <h3>WAF Blocked</h3>
+            <div class="metric-value blocked-reqs">{{ waf_stats['total'] }}</div>
+        </div>
+        <div class="metric-card">
+            <h3>Vulnerabilities</h3>
+            <div class="metric-value total-vulns">{{ vuln_stats['total'] }}</div>
+        </div>
+        <div class="metric-card">
+            <h3>Severity Breakdown</h3>
+            <div class="severity-breakdown">
+                <div class="sev-row"><span class="badge-high">High</span> <span>{{ vuln_stats['high'] }}</span></div>
+                <div class="sev-row"><span class="badge-medium">Medium</span> <span>{{ vuln_stats['medium'] }}</span></div>
+                <div class="sev-row"><span class="badge-low">Low</span> <span>{{ vuln_stats['low'] }}</span></div>
             </div>
         </div>
-        <div class="card">
-            <div class="card-title">Vulnerabilities</div>
-            <div class="card-value" style="color: var(--accent-orange);">
-                {% if vuln_stats is mapping %}
-                    {{ vuln_stats.get('total', 0) }}
-                {% elif vuln_stats is iterable and vuln_stats is not string %}
-                    {{ vuln_stats|length }}
-                {% else %}
-                    0
-                {% endif %}
-            </div>
-        </div>
-        <div class="card" style="padding: 14px 20px;">
-            <div class="card-title">Severity Breakdown</div>
-            <div class="severity-list">
-                <div class="severity-item">
-                    <span class="badge-lbl lbl-high">High</span> 
-                    <span>{% if vuln_stats is mapping %}{{ vuln_stats.get('high', 0) }}{% else %}0{% endif %}</span>
-                </div>
-                <div class="severity-item">
-                    <span class="badge-lbl lbl-medium">Medium</span> 
-                    <span>{% if vuln_stats is mapping %}{{ vuln_stats.get('medium', 0) }}{% else %}0{% endif %}</span>
-                </div>
-                <div class="severity-item">
-                    <span class="badge-lbl lbl-low">Low</span> 
-                    <span>{% if vuln_stats is mapping %}{{ vuln_stats.get('low', 0) }}{% else %}0{% endif %}</span>
-                </div>
-            </div>
-        </div>
-    </section>
+    </div>
 
-    <section class="ingestion-panel">
-        <div class="card-title" style="margin-bottom: 10px;">Add New Scanner Target</div>
-        <div class="form-group">
-            <input type="url" id="target-url-input" class="form-input" placeholder="https://example-target.com" required>
-            <button class="btn-add" onclick="addNewTarget()">Add Target</button>
-        </div>
-    </section>
+    <div class="control-panel">
+        <div class="panel-title">Add New Scanner Target</div>
+        <form id="targetForm" class="input-group">
+            <input type="url" id="targetUrl" placeholder="https://example-target.com" required>
+            <button type="submit" class="btn">Add Target</button>
+        </form>
+    </div>
 
-    <section>
-        <div class="section-title">Targets Auditing Control Deck</div>
-        <table class="targets-table">
+    <div class="data-deck-title">Targets Auditing Control Deck</div>
+    <div class="table-container">
+        <table>
             <thead>
                 <tr>
-                    <th style="width: 5%;">#</th>
-                    <th style="width: 35%;">Target URL</th>
-                    <th style="width: 12%;">Scan Status</th>
-                    <th style="width: 25%;">Live Execution Monitor</th>
-                    <th style="width: 8%;">Risk Matrix</th>
-                    <th style="width: 15%;">Action Panel</th>
+                    <th style="width: 5%">#</th>
+                    <th style="width: 35%">Target URL</th>
+                    <th style="width: 15%">Scan Status</th>
+                    <th style="width: 25%">Live Execution Monitor</th>
+                    <th style="width: 5%">Risk Matrix</th>
+                    <th style="width: 15%">Action Panel</th>
                 </tr>
             </thead>
-            <tbody id="targets-table-body">
+            <tbody id="targetTableBody">
                 {% if targets %}
-                    {% for target in targets %}
-                    <tr id="target-row-{{ target.id }}">
+                    {% for t in targets %}
+                    <tr id="target-row-{{ t['id'] }}">
                         <td>{{ loop.index }}</td>
-                        <td id="target-url-{{ target.id }}" style="font-family: monospace; color: #c4bfe3;">{{ target.url }}</td>
+                        <td><strong>{{ t['url'] }}</strong></td>
+                        <td><span class="status-badge {{ t['scan_status'] }}" id="status-badge-{{ t['id'] }}">{{ t['scan_status'] }}</span></td>
+                        <td id="progress-monitor-{{ t['id'] }}" style="font-size: 0.9rem; color: var(--text-muted);">—</td>
+                        <td id="risk-score-{{ t['id'] }}" style="font-weight: 700;">{{ t['risk_score'] }}</td>
                         <td>
-                            <span id="badge-{{ target.id }}" class="status-badge {{ target.scan_status }}">
-                                {{ target.scan_status }}
-                            </span>
-                        </td>
-                        <td>
-                            <span id="progress-text-{{ target.id }}" style="font-size: 0.85rem; color: #a59cc6;">
-                                {% if target.scan_status == 'completed' %}✅ Analysis Complete{% else %}—{% endif %}
-                            </span>
-                        </td>
-                        <td id="risk-{{ target.id }}" style="font-weight: bold;">{{ target.risk_score or 0 }}</td>
-                        <td style="vertical-align: middle;">
-                            <div class="action-btn-container">
-                                <button class="btn-scan" onclick="startScanPipeline({{ target.id }})">
-                                    ▶ Scan
-                                </button>
-                                
-                                <button class="btn-download" 
-                                        onclick="triggerReportDownload({{ target.id }})" 
-                                        {% if target.scan_status != 'completed' %}disabled{% endif %}
-                                        id="download-btn-{{ target.id }}"
-                                        title="Download PDF Security Report">
-                                    📥 Report
-                                </button>
-
-                                <button class="btn-remove" 
-                                        onclick="removeTargetFromHistory({{ target.id }})"
-                                        title="Remove Target History">
-                                    🗑 Remove
-                                </button>
+                            <div class="action-flex">
+                                <button class="btn-ico btn-scan" title="Launch Scanner Pipeline" onclick="startScan({{ t['id'] }})" id="btn-scan-{{ t['id'] }}" {% if t['scan_status'] == 'scanning' %}disabled{% endif %}><i class="fa-solid fa-play"></i></button>
+                                <button class="btn-ico btn-report" title="Download PDF Summary Report" onclick="downloadReport({{ t['id'] }})" id="btn-report-{{ t['id'] }}" {% if t['scan_status'] != 'completed' %}disabled{% endif %}><i class="fa-solid fa-file-pdf"></i></button>
+                                <button class="btn-ico btn-delete" title="Purge Assets History" onclick="deleteTarget({{ t['id'] }})"><i class="fa-solid fa-trash-can"></i></button>
                             </div>
                         </td>
                     </tr>
                     {% endfor %}
                 {% else %}
                     <tr>
-                        <td colspan="6" style="text-align: center; color: var(--text-dim); padding: 30px;">No diagnostic targets identified. Add a URL above to initialize audit modules.</td>
+                        <td colspan="6" class="empty-row-notice">No diagnostic targets identified. Add a URL above to initialize audit modules.</td>
                     </tr>
                 {% endif %}
             </tbody>
         </table>
-    </section>
+    </div>
 
     <script>
-    function addNewTarget() {
-        const urlInput = document.getElementById('target-url-input');
-        const urlValue = urlInput.value.trim();
-        if(!urlValue) return;
+        // ── CLOUD ARCHITECTURE BACKEND API PATH LOCK ───────────────────────────
+        // Replace this URL with your exact Render web service live string address!
+        const API_BASE = "https://bensec-backend.onrender.com";
 
-        fetch('/api/targets', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: urlValue })
-        })
-        .then(res => {
-            if(!res.ok) throw new Error('Could not add target configuration.');
-            window.location.reload();
-        })
-        .catch(err => alert(err.message));
-    }
+        // Handle Target Configuration Addition submissions
+        document.getElementById("targetForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const urlInput = document.getElementById("targetUrl");
+            const url = urlInput.value.trim();
 
-    function startScanPipeline(targetId) {
-        fetch(`/api/targets/${targetId}/scan`, { method: 'POST' })
-        .then(res => {
-            if (!res.ok) throw new Error('Engine initialization request rejected.');
-            return res.json();
-        })
-        .then(data => {
-            console.log(`[INIT] Pipeline engine broadcast: ${data.message}`);
-            connectLiveProgressStream(targetId);
-        })
-        .catch(err => alert('Engine Failure initialization: ' + err.message));
-    }
-
-    function triggerReportDownload(targetId) {
-        const btn = document.getElementById(`download-btn-${targetId}`);
-        const originalContent = btn.innerHTML;
-        
-        const rawUrlElement = document.getElementById(`target-url-${targetId}`);
-        let domainName = `target_${targetId}`;
-        
-        if (rawUrlElement) {
             try {
-                let cleanText = rawUrlElement.innerText.trim();
-                let urlObj = new URL(cleanText);
-                domainName = urlObj.hostname.replace('www.', '');
-            } catch (e) {
-                domainName = rawUrlElement.innerText.replace(/^(https?:\/\/)?(www\.)?/, '').replace(/[^\w\.-]/g, '_');
-            }
-        }
-        
-        btn.innerHTML = "⏳ Compiling...";
-        btn.disabled = true;
-
-        fetch(`/api/report/${targetId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'technical' })
-        })
-        .then(response => {
-            if (!response.ok) throw new Error('System failed processing document generation pipeline.');
-            return response.blob();
-        })
-        .then(blob => {
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            a.download = `${domainName}_security_report.pdf`;
-            
-            document.body.appendChild(a);
-            a.click();
-            
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-        })
-        .catch(error => {
-            console.error('[REPORT FAILED]', error);
-            alert('File processing error: ' + error.message);
-        })
-        .finally(() => {
-            btn.innerHTML = originalContent;
-            btn.disabled = false;
-        });
-    }
-
-    function removeTargetFromHistory(targetId) {
-        if (!confirm("Are you sure you want to delete this target and all its vulnerability audit history?")) {
-            return;
-        }
-
-        fetch(`/api/targets/${targetId}`, {
-            method: 'DELETE'
-        })
-        .then(res => {
-            if (!res.ok) throw new Error('Backend engine rejected target removal query request.');
-            return res.json();
-        })
-        .then(data => {
-            const row = document.getElementById(`target-row-${targetId}`);
-            if (row) {
-                row.style.transition = "all 0.2s ease";
-                row.style.opacity = "0";
-                setTimeout(() => {
-                    row.remove();
-                    // Force complete summary metric card recalculation on the server
+                const response = await fetch(`${API_BASE}/api/targets`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ url: url })
+                });
+                if (response.ok) {
                     window.location.reload();
-                }, 200);
+                } else {
+                    const err = await response.json();
+                    alert(`Error adding target configuration mapping: ${err.error}`);
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Connection pipeline verification failed connecting to cloud API.");
             }
-        })
-        .catch(err => {
-            console.error('[REMOVE FAILED]', err);
-            alert('Removal process failed: ' + err.message);
         });
-    }
 
-    function connectLiveProgressStream(targetId) {
-        const progressBadge = document.getElementById(`badge-${targetId}`);
-        const txtNode = document.getElementById(`progress-text-${targetId}`);
-        
-        if(progressBadge) {
-            progressBadge.className = "status-badge scanning";
-            progressBadge.innerText = "scanning";
+        // Trigger Execution Scanner Pipeline Task Threading
+        async function startScan(targetId) {
+            const scanBtn = document.getElementById(`btn-scan-${targetId}`);
+            if (scanBtn) scanBtn.disabled = true;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/targets/${targetId}/scan`, { method: "POST" });
+                if (response.ok) {
+                    const badge = document.getElementById(`status-badge-${targetId}`);
+                    if (badge) {
+                        badge.innerText = "scanning";
+                        badge.className = "status-badge scanning";
+                    }
+                    listenToProgress(targetId);
+                } else {
+                    if (scanBtn) scanBtn.disabled = false;
+                    alert("Failed to initialize active scanner background thread execution pipeline loops.");
+                }
+            } catch (err) {
+                if (scanBtn) scanBtn.disabled = false;
+                console.error(err);
+            }
         }
 
-        const eventSource = new EventSource(`/api/targets/${targetId}/progress`);
+        // Handle Real-Time Server-Sent Events (SSE) Live Streams
+        function listenToProgress(targetId) {
+            const monitorCell = document.getElementById(`progress-monitor-${targetId}`);
+            const badge = document.getElementById(`status-badge-${targetId}`);
+            const reportBtn = document.getElementById(`btn-report-${targetId}`);
+            const scoreCell = document.getElementById(`risk-score-${targetId}`);
 
-        eventSource.onmessage = function(event) {
-            const state = JSON.parse(event.data);
-            
-            if (txtNode) {
-                txtNode.innerText = `${state.step} (${state.pct}%) | Findings: ${state.findings}`;
-            }
+            const eventSource = new EventSource(`${API_BASE}/api/targets/${targetId}/progress`);
 
-            if (state.done || state.pct === 100) {
-                eventSource.close();
+            eventSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
                 
-                if(progressBadge) {
-                    progressBadge.className = "status-badge completed";
-                    progressBadge.innerText = "completed";
+                if (data.step && monitorCell) {
+                    if (data.step === "—") {
+                        monitorCell.innerHTML = "—";
+                    } else {
+                        monitorCell.innerHTML = `<span style="color:#f59e0b;">${data.pct}%</span> — ${data.step} <span style="background:rgba(239,68,68,0.15);padding:2px 6px;border-radius:4px;color:#ef4444;font-size:0.75rem;margin-left:4px;font-weight:bold;">${data.findings} vulns</span>`;
+                    }
                 }
-                if (txtNode) txtNode.innerText = "✅ Analysis Complete";
-                
-                activateReportButton(targetId);
-            }
-            
-            if (state.error) {
+
+                if (data.done) {
+                    eventSource.close();
+                    if (badge) {
+                        badge.innerText = "completed";
+                        badge.className = "status-badge completed";
+                    }
+                    if (reportBtn) reportBtn.disabled = false;
+                    
+                    // Delay slightly then perform historical reload to pull risk matrix values
+                    setTimeout(() => { window.location.reload(); }, 1500);
+                }
+
+                if (data.error) {
+                    eventSource.close();
+                    if (badge) {
+                        badge.innerText = "error";
+                        badge.className = "status-badge error";
+                    }
+                }
+            };
+
+            eventSource.onerror = function() {
                 eventSource.close();
-                if(progressBadge) {
-                    progressBadge.className = "status-badge error";
-                    progressBadge.innerText = "error";
-                }
-            }
-        };
-
-        eventSource.onerror = function() {
-            eventSource.close();
-        };
-    }
-
-    function activateReportButton(targetId) {
-        const downloadBtn = document.getElementById(`download-btn-${targetId}`);
-        if (downloadBtn) {
-            downloadBtn.removeAttribute('disabled');
-            downloadBtn.style.backgroundColor = "#24193d";
-            downloadBtn.style.color = "var(--text-neon)";
-            downloadBtn.style.border = "1px solid var(--accent-purple)";
-            downloadBtn.style.opacity = "1";
-            downloadBtn.style.cursor = "pointer";
+            };
         }
-    }
+
+        // Download Report Assets PDFs
+        async function downloadReport(targetId) {
+            try {
+                const response = await fetch(`${API_BASE}/api/report/${targetId}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ type: "technical" })
+                });
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `BENSEC-Security-Audit-Report-Target-${targetId}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                } else {
+                    alert("Error compiling PDF structural compilation summary payload arrays.");
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Connection loss dropped stream asset report compilation loops.");
+            }
+        }
+
+        // Delete Targets and Cascading Metrics Dependencies Automatically
+        async function deleteTarget(targetId) {
+            if (!confirm("Are you sure you want to permanently delete this target and clear its full vulnerability history statistics?")) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/targets/${targetId}`, { method: "DELETE" });
+                if (response.ok) {
+                    const row = document.getElementById(`target-row-${targetId}`);
+                    if (row) row.remove();
+                    window.location.reload(); // Refresh to drop global counters immediately
+                } else {
+                    alert("Failed to securely drop monitored assets from tracking memory matrices.");
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Database connection drop prevented asset synchronization commands.");
+            }
+        }
+
+        // Auto-Hook active streams upon template DOM lifecycle generation hooks
+        document.addEventListener("DOMContentLoaded", () => {
+            {% for t in targets %}
+                {% if t['scan_status'] == 'scanning' %}
+                    listenToProgress({{ t['id'] }});
+                {% endif %}
+            {% endfor %}
+        });
     </script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 """
 BENSEC - Web Application Security Scanner & WAF
-Main Flask application entry point.
+Main Flask application entry point with Cross-Origin Resource Sharing (CORS) enabled.
 """
 
 import os
@@ -11,7 +11,8 @@ import time
 import json
 import sqlite3
 from flask import Flask, render_template, request, jsonify, send_file, Response
-from flask_cors import CORS
+from flask_cors import CORS  # ── ADDED FOR CROSS-ORIGIN COMMUNICATION ──
+
 # ── Silence Insecure Request Warnings ─────────────────────────────────────────
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -54,6 +55,10 @@ logger = logging.getLogger(__name__)
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
+
+# Enable CORS for all API paths to accept requests from your Cloudflare Pages domain
+CORS(app, resources={r"/api/*": {"origins": "*"}})
+
 app.secret_key = os.environ.get("SECRET_KEY", "bensec-dev-key-change-in-prod")
 
 # Register WAF middleware
@@ -71,6 +76,10 @@ with app.app_context():
 @app.after_request
 def add_header(response):
     """Purges browser disk cache states to ensure dynamic operations update instantly."""
+    # Allow credentials and cross-origin global headers for standard JSON fetch requests
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
@@ -236,7 +245,7 @@ def api_start_scan(target_id):
         return jsonify({"error": "Target not found"}), 404
 
     thread = threading.Thread(
-        target=run_scan,
+        run_scan,
         args=(target_id, target["url"]),
         daemon=True
     )
@@ -326,7 +335,7 @@ def api_scan_progress(target_id):
             time.sleep(1)
 
     return Response(generate(), mimetype="text/event-stream",
-                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Access-Control-Allow-Origin": "*"})
 
 
 @app.route("/api/targets/<int:target_id>/progress/snapshot", methods=["GET"])

@@ -1,0 +1,455 @@
+"""
+BENSEC - Web Application Security Scanner & WAF
+Main Flask application entry point.
+"""
+
+import os
+import sys
+import threading
+import logging
+import time
+import json
+import sqlite3
+from flask import Flask, render_template, request, jsonify, send_file, Response
+
+# ── Silence Insecure Request Warnings ─────────────────────────────────────────
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Ensure project root is in path
+sys.path.insert(0, os.path.dirname(__file__))
+
+# Safe fallback imports validation wrapper block
+try:
+    from database.models import (
+        init_db, add_target, get_all_targets, get_target,
+        update_target_status, get_vulnerabilities, get_vuln_stats,
+        get_waf_logs, get_waf_stats, get_request_logs,
+        get_blacklist, blacklist_ip, remove_from_blacklist,
+    )
+except ImportError as err:
+    print(f"\n[CRITICAL ERROR] Failed importing database dependencies: {err}")
+    print("Please confirm your 'database/models.py' file matches your exact structural schemas.\n")
+    sys.exit(1)
+
+from scanner.crawler import WebCrawler
+from scanner.xss_scanner import XSSScanner
+from scanner.sqli_scanner import SQLiScanner
+from scanner.dir_bruteforce import DirectoryBruteforcer
+from scanner.header_checker import HeaderChecker
+from waf.request_filter import register_waf
+from reports.report_generator import generate_report
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+os.makedirs("logs", exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("logs/bensec.log"),
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# ── App ───────────────────────────────────────────────────────────────────────
+app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "bensec-dev-key-change-in-prod")
+
+# Register WAF middleware
+register_waf(app)
+
+# Initialize database
+with app.app_context():
+    try:
+        init_db()
+    except Exception as db_err:
+        print(f"\n[DATABASE SCHEMA ERROR] Failed initializing database layout: {db_err}\n")
+        sys.exit(1)
+
+# ── Anti-Cache Header Hooks ───────────────────────────────────────────────────
+@app.after_request
+def add_header(response):
+    """Purges browser disk cache states to ensure dynamic operations update instantly."""
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+# ── Progress Tracking ─────────────────────────────────────────────────────────
+scan_progress: dict = {}
+_progress_lock = threading.Lock()
+
+def _set_progress(target_id: int, step: str, pct: int, findings: int = 0,
+                  done: bool = False, error: bool = False):
+    with _progress_lock:
+        scan_progress[target_id] = {
+            "step": step, "pct": pct, "findings": findings,
+            "done": done, "error": error,
+        }
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+SEVERITY_SCORES = {"Critical": 95, "High": 80, "Medium": 55, "Low": 20}
+
+
+def compute_risk_score(vulns):
+    if not vulns:
+        return 0
+    weights = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
+    total = sum(weights.get(v["severity"], 1) for v in vulns)
+    max_possible = len(vulns) * 4
+    return min(100, int((total / max_possible) * 100))
+
+
+def run_scan(target_id: int, target_url: str):
+    """Full scan pipeline — runs in a background thread with cumulative live counting."""
+    logger.info(f"[SCAN] Starting scan for target {target_id}: {target_url}")
+    update_target_status(target_id, "scanning")
+    all_vulns = []
+
+    try:
+        # 1. Crawl
+        _set_progress(target_id, "🕷  Crawling pages…", 5)
+        crawler = WebCrawler(target_url, max_pages=30)
+        crawl_result = crawler.crawl()
+        pages = crawl_result["pages"]
+        forms = crawl_result["forms"]
+        _set_progress(target_id, f"🕷  Crawled {len(pages)} pages", 15)
+
+        # 2. XSS scan
+        _set_progress(target_id, "🔍 Running XSS scan…", 20, findings=len(all_vulns))
+        
+        xss_live_counter = [0]
+        def xss_callback():
+            xss_live_counter[0] += 1
+            current_total = len(all_vulns) + xss_live_counter[0]
+            _set_progress(target_id, "🔍 Running XSS scan…", 20, findings=current_total)
+
+        xss = XSSScanner()
+        xss_findings = xss.scan(pages, forms, on_find=xss_callback)
+        all_vulns.extend(xss_findings)
+        _set_progress(target_id, f"🔍 XSS done — {len(xss_findings)} findings", 40,
+                      findings=len(all_vulns))
+
+        # 3. SQLi scan
+        _set_progress(target_id, "💉 Running SQLi scan…", 42, findings=len(all_vulns))
+        
+        sqli_live_counter = [0]
+        def sqli_callback():
+            sqli_live_counter[0] += 1
+            current_total = len(all_vulns) + sqli_live_counter[0]
+            _set_progress(target_id, "💉 Running SQLi scan…", 42, findings=current_total)
+
+        sqli = SQLiScanner()
+        sqli_findings = sqli.scan(pages, forms, on_find=sqli_callback)
+        all_vulns.extend(sqli_findings)
+        _set_progress(target_id, f"💉 SQLi done — {len(sqli_findings)} findings", 60,
+                      findings=len(all_vulns))
+
+        # 4. Directory enumeration
+        _set_progress(target_id, "📂 Directory bruteforce…", 62, findings=len(all_vulns))
+        dirbuster = DirectoryBruteforcer(target_url)
+        dir_findings = dirbuster.scan()
+        all_vulns.extend(dir_findings)
+        _set_progress(target_id, f"📂 Dir scan done — {len(dir_findings)} findings", 78,
+                      findings=len(all_vulns))
+
+        # 5. Header analysis
+        _set_progress(target_id, "🔒 Checking security headers…", 80, findings=len(all_vulns))
+        header_checker = HeaderChecker()
+        header_findings = header_checker.scan(target_url)
+        all_vulns.extend(header_findings)
+        _set_progress(target_id, f"🔒 Headers done — {len(header_findings)} findings", 90,
+                      findings=len(all_vulns))
+
+        # 6. Save findings to DB
+        _set_progress(target_id, "💾 Saving findings to database…", 93,
+                      findings=len(all_vulns))
+        from database.models import add_vulnerability
+        for v in all_vulns:
+            add_vulnerability(
+                target_id=target_id,
+                vuln_type=v["vuln_type"],
+                severity=v["severity"],
+                affected_url=v["affected_url"],
+                parameter=v.get("parameter"),
+                payload=v.get("payload"),
+                description=v.get("description"),
+            )
+
+        risk_score = compute_risk_score(all_vulns)
+        update_target_status(target_id, "completed", risk_score)
+        _set_progress(target_id, f"✅ Scan complete — {len(all_vulns)} total findings", 100,
+                      findings=len(all_vulns), done=True)
+        logger.info(f"[SCAN] Completed target {target_id}. "
+                    f"Findings: {len(all_vulns)} | Risk Score: {risk_score}")
+
+    except Exception as e:
+        logger.error(f"[SCAN] Error scanning target {target_id}: {e}", exc_info=True)
+        update_target_status(target_id, "error")
+        _set_progress(target_id, f"❌ Error: {e}", 0, error=True)
+
+
+# ── Dashboard Routes ──────────────────────────────────────────────────────────
+
+@app.route("/")
+def index():
+    targets = get_all_targets()
+    vuln_stats = get_vuln_stats()
+    waf_stats = get_waf_stats()
+    return render_template("dashboard.html",
+                           targets=targets,
+                           vuln_stats=vuln_stats,
+                           waf_stats=waf_stats)
+
+
+# ── Target API ────────────────────────────────────────────────────────────────
+
+@app.route("/api/targets", methods=["GET"])
+def api_targets():
+    targets = get_all_targets()
+    return jsonify([dict(t) for t in targets])
+
+
+@app.route("/api/targets", methods=["POST"])
+def api_add_target():
+    data = request.json or {}
+    url = data.get("url", "").strip()
+    if not url:
+        return jsonify({"error": "URL is required"}), 400
+
+    if not url.startswith(("http://", "https://")):
+        return jsonify({"error": "URL must start with http:// or https://"}), 400
+
+    target = add_target(url)
+    if not target:
+        return jsonify({"error": "Failed to add target"}), 500
+    return jsonify(dict(target)), 201
+
+
+@app.route("/api/targets/<int:target_id>/scan", methods=["POST"])
+def api_start_scan(target_id):
+    target = get_target(target_id)
+    if not target:
+        return jsonify({"error": "Target not found"}), 404
+
+    thread = threading.Thread(
+        target=run_scan,
+        args=(target_id, target["url"]),
+        daemon=True
+    )
+    thread.start()
+    return jsonify({"message": f"Scan started for {target['url']}"}), 202
+
+
+@app.route("/api/targets/<int:target_id>", methods=["GET"])
+def api_target_detail(target_id):
+    target = get_target(target_id)
+    if not target:
+        return jsonify({"error": "Target not found"}), 404
+    vulns = get_vulnerabilities(target_id)
+    return jsonify({
+        "target": dict(target),
+        "vulnerabilities": [dict(v) for v in vulns],
+    })
+
+
+@app.route("/api/targets/<int:target_id>", methods=["DELETE"])
+def api_delete_target(target_id):
+    """Deletes target metrics cleanly by making a safe call into the models module framework."""
+    try:
+        import database.models
+        if hasattr(database.models, 'delete_target_and_history'):
+            success = database.models.delete_target_and_history(target_id)
+            if success:
+                logger.info(f"[DELETE SUCCESS] Automatically dropped target row {target_id} and cascading dependencies.")
+                return jsonify({"message": f"Target {target_id} permanently deleted."}), 200
+        
+        base_dir = os.path.dirname(os.path.abspath(database.models.__file__))
+        db_path = os.path.join(base_dir, "scanner.db")
+        
+        conn = sqlite3.connect(db_path, timeout=10.0)
+        cursor = conn.cursor()
+        cursor.execute("BEGIN IMMEDIATE TRANSACTION;")
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = [r[0].lower() for r in cursor.fetchall()]
+        
+        for t in ["vulnerabilities", "vulnerability", "vulns", "vuln"]:
+            if t in tables:
+                cursor.execute(f"DELETE FROM {t} WHERE target_id = ?;", (target_id,))
+        if "targets" in tables:
+            cursor.execute("DELETE FROM targets WHERE id = ?;", (target_id,))
+        
+        conn.execute("COMMIT;")
+        conn.close()
+        return jsonify({"message": f"Target {target_id} cleanly purged via automatic fallback."}), 200
+    except Exception as err:
+        logger.error(f"[DELETE FAILED] API route failed to clear assets: {err}")
+        return jsonify({"error": str(err)}), 500
+
+
+@app.route("/api/targets/<int:target_id>/progress", methods=["GET"])
+def api_scan_progress(target_id):
+    """SSE endpoint — streams progress events until scan completes, using safe key/attr extraction."""
+    def generate():
+        while True:
+            with _progress_lock:
+                state = scan_progress.get(target_id)
+            if state is None:
+                target = get_target(target_id)
+                status = "unknown"
+                if target:
+                    if isinstance(target, dict):
+                        status = target.get("scan_status", "unknown")
+                    else:
+                        try:
+                            status = target["scan_status"]
+                        except Exception:
+                            try:
+                                status = target.scan_status
+                            except Exception:
+                                pass
+                
+                if status == "scanning":
+                    payload = json.dumps({"step": "⏳ Queuing crawler tasks...", "pct": 4, "findings": 0, "done": False, "error": False})
+                elif status == "completed":
+                    payload = json.dumps({"step": "✅ Already completed", "pct": 100, "findings": 0, "done": True, "error": False})
+                else:
+                    payload = json.dumps({"step": "—", "pct": 0, "findings": 0, "done": False, "error": False})
+                yield f"data: {payload}\n\n"
+            else:
+                yield f"data: {json.dumps(state)}\n\n"
+                if state.get("done") or state.get("error"):
+                    break
+            time.sleep(1)
+
+    return Response(generate(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.route("/api/targets/<int:target_id>/progress/snapshot", methods=["GET"])
+def api_scan_progress_snapshot(target_id):
+    with _progress_lock:
+        state = scan_progress.get(target_id)
+    if state is None:
+        target = get_target(target_id)
+        status = "unknown"
+        if target:
+            if isinstance(target, dict):
+                status = target.get("scan_status", "unknown")
+            else:
+                try:
+                    status = target["scan_status"]
+                except Exception:
+                    status = target.scan_status if hasattr(target, "scan_status") else "unknown"
+        return jsonify({"step": status, "pct": 100 if status == "completed" else 0,
+                        "findings": 0, "done": status == "completed", "error": status == "error"})
+    return jsonify(state)
+
+
+# ── Vulnerability API ─────────────────────────────────────────────────────────
+
+@app.route("/api/vulnerabilities", methods=["GET"])
+def api_vulnerabilities():
+    target_id = request.args.get("target_id", type=int)
+    vulns = get_vulnerabilities(target_id)
+    return jsonify([dict(v) for v in vulns])
+
+
+# ── WAF API ───────────────────────────────────────────────────────────────────
+
+@app.route("/api/waf/logs", methods=["GET"])
+def api_waf_logs():
+    limit = request.args.get("limit", 100, type=int)
+    logs = get_waf_logs(limit)
+    return jsonify([dict(l) for l in logs])
+
+
+@app.route("/api/waf/stats", methods=["GET"])
+def api_waf_stats():
+    stats = get_waf_stats()
+    return jsonify({
+        "total": stats["total"],
+        "by_type": [dict(r) for r in stats["by_type"]],
+        "top_ips": [dict(r) for r in stats["top_ips"]],
+    })
+
+
+# ── IP Blacklist API ──────────────────────────────────────────────────────────
+
+@app.route("/api/blacklist", methods=["GET"])
+def api_get_blacklist():
+    return jsonify([dict(r) for r in get_blacklist()])
+
+
+@app.route("/api/blacklist", methods=["POST"])
+def api_add_blacklist():
+    data = request.json or {}
+    ip = data.get("ip_address", "").strip()
+    if not ip:
+        return jsonify({"error": "ip_address required"}), 400
+    blacklist_ip(
+        ip_address=ip,
+        attack_type=data.get("attack_type", "Manual"),
+        block_reason=data.get("reason", "Manually blocked"),
+        permanent=data.get("permanent", False),
+    )
+    return jsonify({"message": f"{ip} blacklisted"}), 201
+
+
+@app.route("/api/blacklist/<ip>", methods=["DELETE"])
+def api_remove_blacklist(ip):
+    remove_from_blacklist(ip)
+    return jsonify({"message": f"{ip} removed from blacklist"})
+
+
+# ── Request Logs API ──────────────────────────────────────────────────────────
+
+@app.route("/api/requests", methods=["GET"])
+def api_request_logs():
+    limit = request.args.get("limit", 200, type=int)
+    logs = get_request_logs(limit)
+    return jsonify([dict(l) for l in logs])
+
+
+# ── Reports API ───────────────────────────────────────────────────────────────
+
+@app.route("/api/report/<int:target_id>", methods=["POST"])
+def api_generate_report(target_id):
+    data = request.json or {}
+    report_type = data.get("type", "technical")
+
+    target = get_target(target_id)
+    if not target:
+        return jsonify({"error": "Target not found"}), 404
+
+    vulns = [dict(v) for v in get_vulnerabilities(target_id)]
+    waf_stats = get_waf_stats()
+    waf_stats_clean = {
+        "total": waf_stats["total"],
+        "by_type": [dict(r) for r in waf_stats["by_type"]],
+        "top_ips": [dict(r) for r in waf_stats["top_ips"]],
+    }
+
+    filepath = generate_report(
+        target_url=target["url"],
+        vulnerabilities=vulns,
+        waf_stats=waf_stats_clean,
+        report_type=report_type,
+    )
+
+    return send_file(filepath, as_attachment=True,
+                     download_name=os.path.basename(filepath),
+                     mimetype="application/pdf")
+
+
+# ── Entry Point ───────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000)),
+        debug=os.environ.get("FLASK_DEBUG", "false").lower() == "true",
+    )
